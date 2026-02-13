@@ -2,6 +2,12 @@ import streamlit as st
 import sqlite3
 import hashlib
 
+# ===================== PAGE CONFIG (MUST BE FIRST) =====================
+st.set_page_config(
+    page_title="Booking Safety Calculator",
+    layout="wide"
+)
+
 # ===================== AUTH / DB LAYER =====================
 
 DB_NAME = "users.db"
@@ -96,6 +102,32 @@ if "logged_in" not in st.session_state:
 
 if "page" not in st.session_state:
     st.session_state.page = "calculator"  # or "admin"
+
+# ---------------- GLOBAL CSS (FIX TOP CUT + FONTS) ----------------
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 1.5rem;
+}
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.summary-box p {
+    font-size: 12px;
+    margin-bottom: 3px;
+}
+.summary-box h3 {
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+.stSelectbox label, .stNumberInput label {
+    font-size: 13px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ---------------- AUTH SCREENS ----------------
 def show_create_admin():
@@ -211,7 +243,7 @@ if not st.session_state.logged_in:
 # ---------------- TOP BAR ----------------
 st.markdown(
     f"""
-    <div style="display:flex; justify-content: space-between; align-items:center;">
+    <div class="top-bar">
         <div>👤 Logged in as: <b>{st.session_state.username}</b> ({st.session_state.role})</div>
     </div>
     """,
@@ -236,35 +268,6 @@ if st.session_state.page == "admin" and st.session_state.role == "admin":
     st.stop()
 
 # ===================== CALCULATOR APP =====================
-
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="Booking Safety Calculator",
-    layout="wide"
-)
-
-# -------- REMOVE EXTRA TOP SPACE & SMALLER FONTS --------
-st.markdown(
-    """
-    <style>
-    .block-container {
-        padding-top: 1rem;
-    }
-    .summary-box p {
-        font-size: 12px;
-        margin-bottom: 3px;
-    }
-    .summary-box h3 {
-        font-size: 14px;
-        margin-bottom: 5px;
-    }
-    .stSelectbox label, .stNumberInput label {
-        font-size: 13px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 st.title("🧮 Booking Safety Calculator")
 st.caption("Operation Team – Safe vs Loss Booking Tool")
@@ -292,46 +295,6 @@ supplier_di = {
     "AIR IQ": 0.01,
     "Tripjack Flights": 0.005,
     "Etrav HAP 58Y8": 0.01,
-    # ZERO DI suppliers
-    "Consulate General of Indonesia-Mumbai": 0,
-    "RIYA HAP 6A4T": 0,
-    "Consulate Genenal Of Hungary - Visa": 0,
-    "MUSAFIR.COM INDIA PVT LTD": 0,
-    "MASTER BSP": 0,
-    "Japan vfs": 0,
-    "VFS Global Georgia - Visa": 0,
-    "Akbar Travels HAP 3OT9": 0,
-    "GRNConnect": 0,
-    "CHINA VFS": 0,
-    "FLYCREATIVE ONLINE PVT. LTD (LCC)": 0,
-    "Bajaj Allianz General Insurance": 0,
-    "South Africa VFS": 0,
-    "MakeMyTrip (India) Private Limited": 0,
-    "Travelport Universal Api": 0,
-    "Deputy High Commission of Bangladesh, Mumbai": 0,
-    "Bajaj Allianz General Insurance - Aertrip A/C": 0,
-    "Germany Visa": 0,
-    "Cleartrip Private Limited - AB 1": 0,
-    "CDV HOLIDAYS PRIVATE LIMITED": 0,
-    "Rudraa Tours And Travels Jayashree Patil": 0,
-    "France Vfs": 0,
-    "Vietnam Embassy New Delhi": 0,
-    "Srilanka E Visa": 0,
-    "Morocco Embassy New Delhi": 0,
-    "Regional Passport Office-Mumbai": 0,
-    "Klook Travel Tech Ltd Hong Kong HK": 0,
-    "VANDANA VISA SERVICES": 0,
-    "Consulate General of the Republic of Poland": 0,
-    "Akbar Travel online AG43570": 0,
-    "Just Click N Pay": 0,
-    "IRCTC": 0,
-    "Akbar Travels of India Pvt Ltd - (AG004261)": 0,
-    "Embassy of Gabon": 0,
-    "Go Airlines (India) Limited ( Offline )": 0,
-    "UK VFS": 0,
-    "GO KITE TRAVELS AND TOURS LLP": 0,
-    "Travel super Mall (IXBAIU9800)": 0,
-    "AirIQ Flights series Supplier": 0
 }
 
 supplier_list = sorted(supplier_di.keys())
@@ -384,12 +347,46 @@ if st.button("🧮 Calculate"):
     sale_side = booking_amount + di_amount + handling_fees_net
     difference = round(sale_side - purchase_side, 2)
 
+    # ---------------- FULL SUMMARY ----------------
     st.divider()
     st.subheader("📊 Calculation Summary")
-    if difference < 0:
-        st.error(f"❌ Loss Booking: ₹ {difference}")
-    else:
-        st.success(f"✅ Safe Booking: ₹ {difference}")
+    st.markdown('<div class="summary-box">', unsafe_allow_html=True)
+    o1, o2, o3, o4, o5 = st.columns(5)
+
+    with o1:
+        st.markdown("### 🏷 Supplier & DI")
+        st.write(f"**Supplier:** {supplier_name}")
+        st.write(f"**DI %:** {di_rate*100:.2f}%")
+        st.write(f"**DI Amount:** ₹ {di_amount}")
+
+    with o2:
+        st.markdown("### 📢 Meta Fees")
+        st.write(f"**Meta Partner:** {meta_partner}")
+        st.write(f"**Base Fee:** ₹ {base_fee_calc}")
+        if meta_partner == "Wego Ads":
+            st.write(f"**Ads Fee:** ₹ {ads_fee}")
+        st.write(f"**Total Meta Fees:** ₹ {meta_fee}")
+
+    with o3:
+        st.markdown("### 💳 PG Fees")
+        st.write(f"**PG Fees Input:** ₹ {pg_fees_input}")
+
+    with o4:
+        st.markdown("### 🎯 DI")
+        st.write(f"**Purchase Amount:** ₹ {purchase_amount}")
+        st.write(f"**DI Amount:** ₹ {di_amount}")
+
+    with o5:
+        st.markdown("### 💰 Purchase vs Sale")
+        st.write(f"**Purchase Side:** ₹ {purchase_side}")
+        st.write(f"**Sale Side:** ₹ {sale_side}")
+        st.markdown(f"### 💹 Difference: ₹ {difference}")
+        if difference < 0:
+            st.error("❌ Loss Booking")
+        else:
+            st.success("✅ Safe Booking")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------- FOOTER ----------------
 st.markdown(
