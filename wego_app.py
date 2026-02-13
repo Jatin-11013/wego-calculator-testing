@@ -1,8 +1,9 @@
 import streamlit as st
 import sqlite3
 import hashlib
+from datetime import datetime
 
-# ===================== PAGE CONFIG (MUST BE FIRST) =====================
+# ---------------- PAGE CONFIG (MUST BE FIRST) ----------------
 st.set_page_config(
     page_title="Booking Safety Calculator",
     layout="wide"
@@ -18,11 +19,25 @@ def get_conn():
 def init_db():
     conn = get_conn()
     c = conn.cursor()
+    # Users table
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL
+        )
+    """)
+    # Logs table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            role TEXT,
+            timestamp TEXT,
+            supplier TEXT,
+            purchase REAL,
+            sale REAL,
+            difference REAL
         )
     """)
     conn.commit()
@@ -92,6 +107,50 @@ def update_password(username, new_password):
     conn.commit()
     conn.close()
 
+# ---------------- LOGS ----------------
+
+def add_log(username, role, supplier, purchase, sale, difference):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO logs (username, role, timestamp, supplier, purchase, sale, difference)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        username,
+        role,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        supplier,
+        purchase,
+        sale,
+        difference
+    ))
+    conn.commit()
+    conn.close()
+
+def get_logs_for_user(username):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT timestamp, username, supplier, purchase, sale, difference FROM logs WHERE username = ? ORDER BY timestamp DESC", (username,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_all_logs():
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT timestamp, username, supplier, purchase, sale, difference FROM logs ORDER BY timestamp DESC")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_logs_by_user(username):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT timestamp, username, supplier, purchase, sale, difference FROM logs WHERE username = ? ORDER BY timestamp DESC", (username,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
 # ---------------- INIT ----------------
 init_db()
 
@@ -101,33 +160,7 @@ if "logged_in" not in st.session_state:
     st.session_state.role = None
 
 if "page" not in st.session_state:
-    st.session_state.page = "calculator"  # or "admin"
-
-# ---------------- GLOBAL CSS (FIX TOP CUT + FONTS) ----------------
-st.markdown("""
-<style>
-.block-container {
-    padding-top: 1.5rem;
-}
-.top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-.summary-box p {
-    font-size: 12px;
-    margin-bottom: 3px;
-}
-.summary-box h3 {
-    font-size: 14px;
-    margin-bottom: 5px;
-}
-.stSelectbox label, .stNumberInput label {
-    font-size: 13px;
-}
-</style>
-""", unsafe_allow_html=True)
+    st.session_state.page = "calculator"  # calculator / admin / logs
 
 # ---------------- AUTH SCREENS ----------------
 def show_create_admin():
@@ -230,6 +263,43 @@ def admin_panel():
                 update_password(ru, np)
                 st.success("Password updated")
 
+# ---------------- LOGS PAGE ----------------
+def logs_page():
+    st.title("📜 Logs")
+
+    if st.button("⬅ Back to Calculator"):
+        st.session_state.page = "calculator"
+        st.rerun()
+
+    st.divider()
+
+    if st.session_state.role == "admin":
+        users = [u for u, _ in get_all_users()]
+        filter_user = st.selectbox("Filter by user (optional)", ["All"] + users)
+
+        if filter_user == "All":
+            logs = get_all_logs()
+        else:
+            logs = get_logs_by_user(filter_user)
+    else:
+        logs = get_logs_for_user(st.session_state.username)
+
+    if logs:
+        st.dataframe(
+            logs,
+            use_container_width=True,
+            column_config={
+                0: "Timestamp",
+                1: "Username",
+                2: "Supplier",
+                3: "Purchase",
+                4: "Sale",
+                5: "Difference",
+            }
+        )
+    else:
+        st.info("No logs found.")
+
 # ===================== GATE =====================
 
 if not user_exists():
@@ -239,6 +309,18 @@ if not user_exists():
 if not st.session_state.logged_in:
     show_login()
     st.stop()
+
+# ---------------- UI FIX CSS ----------------
+st.markdown("""
+<style>
+.block-container { padding-top: 1.5rem; }
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ---------------- TOP BAR ----------------
 st.markdown(
@@ -250,21 +332,28 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-c_top1, c_top2 = st.columns([1,1])
+with st.popover("☰"):
+    if st.session_state.role == "admin":
+        if st.button("🛠 Admin Panel"):
+            st.session_state.page = "admin"
+            st.rerun()
 
-if st.session_state.role == "admin":
-    if c_top1.button("🛠️ Admin Panel"):
-        st.session_state.page = "admin"
+    if st.button("📜 Logs"):
+        st.session_state.page = "logs"
         st.rerun()
 
-if c_top2.button("🚪 Logout"):
-    logout()
+    if st.button("🚪 Logout"):
+        logout()
 
 st.divider()
 
 # ---------------- PAGE ROUTER ----------------
 if st.session_state.page == "admin" and st.session_state.role == "admin":
     admin_panel()
+    st.stop()
+
+if st.session_state.page == "logs":
+    logs_page()
     st.stop()
 
 # ===================== CALCULATOR APP =====================
@@ -323,7 +412,6 @@ with c8:
 with c9:
     pg_fees_input = st.number_input("PG Fees (₹)", min_value=0.0, step=10.0)
 
-# ---------------- CALCULATE BUTTON ----------------
 def calculate_meta_fee(meta, flight, amount, pax):
     if meta == "None":
         return 0, 0, 0
@@ -347,7 +435,16 @@ if st.button("🧮 Calculate"):
     sale_side = booking_amount + di_amount + handling_fees_net
     difference = round(sale_side - purchase_side, 2)
 
-    # ---------------- FULL SUMMARY ----------------
+    # Save log
+    add_log(
+        st.session_state.username,
+        st.session_state.role,
+        supplier_name,
+        purchase_side,
+        sale_side,
+        difference
+    )
+
     st.divider()
     st.subheader("📊 Calculation Summary")
     st.markdown('<div class="summary-box">', unsafe_allow_html=True)
