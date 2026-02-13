@@ -162,6 +162,9 @@ if "logged_in" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "calculator"  # calculator / admin / logs
 
+if "menu_open" not in st.session_state:
+    st.session_state.menu_open = True
+
 # ---------------- AUTH SCREENS ----------------
 def show_create_admin():
     st.title("🔐 Create First Admin")
@@ -208,14 +211,46 @@ def logout():
     st.session_state.page = "calculator"
     st.rerun()
 
+# ===================== GATE =====================
+
+if not user_exists():
+    show_create_admin()
+    st.stop()
+
+if not st.session_state.logged_in:
+    show_login()
+    st.stop()
+
+# ---------------- LEFT COLLAPSIBLE MENU ----------------
+with st.sidebar:
+    if st.button("☰ Menu"):
+        st.session_state.menu_open = not st.session_state.menu_open
+
+    if st.session_state.menu_open:
+        st.markdown(f"👤 **{st.session_state.username}**  \nRole: `{st.session_state.role}`")
+        st.divider()
+
+        if st.button("🧮 Calculator"):
+            st.session_state.page = "calculator"
+            st.rerun()
+
+        if st.session_state.role == "admin":
+            if st.button("🛠 Admin Panel"):
+                st.session_state.page = "admin"
+                st.rerun()
+
+        if st.button("📜 Logs"):
+            st.session_state.page = "logs"
+            st.rerun()
+
+        st.divider()
+
+        if st.button("🚪 Logout"):
+            logout()
+
 # ---------------- ADMIN PANEL ----------------
 def admin_panel():
     st.title("🛠️ Admin Panel - User Management")
-
-    if st.button("⬅ Back to Calculator"):
-        st.session_state.page = "calculator"
-        st.rerun()
-
     st.divider()
 
     with st.expander("➕ Add New User"):
@@ -266,16 +301,11 @@ def admin_panel():
 # ---------------- LOGS PAGE ----------------
 def logs_page():
     st.title("📜 Logs")
-
-    if st.button("⬅ Back to Calculator"):
-        st.session_state.page = "calculator"
-        st.rerun()
-
     st.divider()
 
     if st.session_state.role == "admin":
         users = [u for u, _ in get_all_users()]
-        filter_user = st.selectbox("Filter by user (optional)", ["All"] + users)
+        filter_user = st.selectbox("Filter by user", ["All"] + users)
 
         if filter_user == "All":
             logs = get_all_logs()
@@ -285,67 +315,9 @@ def logs_page():
         logs = get_logs_for_user(st.session_state.username)
 
     if logs:
-        st.dataframe(
-            logs,
-            use_container_width=True,
-            column_config={
-                0: "Timestamp",
-                1: "Username",
-                2: "Supplier",
-                3: "Purchase",
-                4: "Sale",
-                5: "Difference",
-            }
-        )
+        st.dataframe(logs, use_container_width=True)
     else:
         st.info("No logs found.")
-
-# ===================== GATE =====================
-
-if not user_exists():
-    show_create_admin()
-    st.stop()
-
-if not st.session_state.logged_in:
-    show_login()
-    st.stop()
-
-# ---------------- UI FIX CSS ----------------
-st.markdown("""
-<style>
-.block-container { padding-top: 1.5rem; }
-.top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- TOP BAR ----------------
-st.markdown(
-    f"""
-    <div class="top-bar">
-        <div>👤 Logged in as: <b>{st.session_state.username}</b> ({st.session_state.role})</div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-with st.popover("☰"):
-    if st.session_state.role == "admin":
-        if st.button("🛠 Admin Panel"):
-            st.session_state.page = "admin"
-            st.rerun()
-
-    if st.button("📜 Logs"):
-        st.session_state.page = "logs"
-        st.rerun()
-
-    if st.button("🚪 Logout"):
-        logout()
-
-st.divider()
 
 # ---------------- PAGE ROUTER ----------------
 if st.session_state.page == "admin" and st.session_state.role == "admin":
